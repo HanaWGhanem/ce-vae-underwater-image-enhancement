@@ -1,16 +1,19 @@
 model:
   target: src.models.cevae.CEVAE
   params:
-    ckpt_path: [your best checkpoint path resulting from the execution of cevae_E2E_lsui.yaml ].ckpt
+    ckpt_path: /workspace/lsui-cevae-epoch119.ckpt
+    ignore_keys:
+      - encoder.conv_in
+
     embed_dim: 256
     ddconfig:
       double_z: False
       z_channels: 256
       resolution: 256
-      in_channels: 3
+      in_channels: 4
       out_ch: 3
       ch: 128
-      ch_mult: [ 1,1,2,2,4]
+      ch_mult: [1, 1, 2, 2, 4]
       num_res_blocks: 2
       attn_resolutions: [16]
       dropout: 0.0
@@ -34,24 +37,25 @@ model:
 
 lightning:
   trainer:
-    max_epochs: 300
+    max_epochs: 100
     accelerator: gpu
-    devices: 4
+    devices: 1
     check_val_every_n_epoch: 10
     strategy: ddp_find_unused_parameters_true
 
 data:
   target: src.data.dataset_wrapper.DataModuleFromConfig
   params:
-    dataset_name: "LSUI"
-    train_batch_size: 8
-    val_batch_size: 32
+    dataset_name: "Joint-ID"
+    train_batch_size: 16
+    val_batch_size: 16
     num_workers: 8
+
     train:
       target: src.data.image_enhancement.DatasetTrainFromImageFileList
       params:
-        training_images_list_file: data/LSUI_train_input.txt
-        target_images_list_file: data/LSUI_train_target.txt
+        training_images_list_file: /workspace/data/LSUI_train_input.txt
+        target_images_list_file: /workspace/data/LSUI_train_target.txt
         random_crop: True
         random_flip: True
         color_jitter:
@@ -61,15 +65,17 @@ data:
           hue: [-0.02, 0.02]
         max_size: 288
         size: 256
+
     validation:
       target: src.data.image_enhancement.DatasetTestFromImageFileList
       params:
-        test_images_list_file: data/LSUI_val_input.txt
-        test_target_images_list_file: data/LSUI_val_target.txt
+        test_images_list_file: /workspace/data/LSUI_val_input.txt
+        test_target_images_list_file: /workspace/data/LSUI_val_target.txt
         size: 256
+
     test:
       target: src.data.image_enhancement.DatasetTestFromImageFileList
       params:
-        test_images_list_file: data/LSUI_val_input.txt
-        test_target_images_list_file: data/LSUI_val_target.txt
+        test_images_list_file: /workspace/data/LSUI_val_input.txt
+        test_target_images_list_file: /workspace/data/LSUI_val_target.txt
         size: 256
