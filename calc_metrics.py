@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import argparse
 from pathlib import Path
 from tqdm import tqdm
@@ -21,7 +20,6 @@ def psnr(img1, img2):
     PIXEL_MAX = 255.0
     return 20 * math.log10(PIXEL_MAX / math.sqrt(mse))
 
-
 def ssim_safe(img1, img2):
     """Compute SSIM safely for any image size"""
     h, w = img1.shape[:2]
@@ -32,12 +30,10 @@ def ssim_safe(img1, img2):
         win_size = 1
     return compare_ssim(img1, img2, data_range=255, channel_axis=-1, win_size=win_size)
 
-
 def load_image(path):
     """Load image as uint8 numpy array"""
     img = Image.open(path).convert("RGB")
     return np.array(img)
-
 
 # ------------------------------
 # Metrics calculation
@@ -45,6 +41,10 @@ def load_image(path):
 def compute_metrics(ref_path, pred_path, lpips_model, device):
     ref = load_image(ref_path)
     pred = load_image(pred_path)
+
+    # Resize predicted image to match reference size
+    if pred.shape != ref.shape:
+        pred = np.array(Image.fromarray(pred).resize((ref.shape[1], ref.shape[0]), Image.LANCZOS))
 
     # PSNR
     psnr_val = psnr(ref, pred)
@@ -61,7 +61,9 @@ def compute_metrics(ref_path, pred_path, lpips_model, device):
 
     return psnr_val, ssim_val, lpips_val
 
-
+# ------------------------------
+# Main CLI
+# ------------------------------
 def main():
     parser = argparse.ArgumentParser(description="Compute PSNR, SSIM, LPIPS metrics")
     parser.add_argument("--ref", type=str, required=True, help="Reference image or folder")
@@ -117,7 +119,6 @@ def main():
     print(f"SSIM:  {np.mean(ssim_list):.4f}")
     print(f"LPIPS: {np.mean(lpips_list):.4f}")
     print(f"Per-image metrics saved to: {args.csv}")
-
 
 if __name__ == "__main__":
     main()
