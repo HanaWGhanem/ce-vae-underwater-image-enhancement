@@ -23,6 +23,48 @@ from pathlib import Path
 import yaml
 from tqdm import tqdm
 from omegaconf import OmegaConf
+import cv2
+
+from depth_anything_v2.dpt import DepthAnythingV2
+from depth_anything_v2.util.transform import Resize, NormalizeImage, PrepareForNet
+import torchvision.transforms as transforms
+model = DepthAnythingV2(encoder='vits', features=64, out_channels=[48, 96, 192, 384])
+model = model.to('cuda')
+model.load_state_dict(torch.load('checkpoints/depth_anything_v2_vits.pth', map_location='cuda')) # TODO Adjust Path
+model.eval()
+
+def get_depth_map(pil_image: Image.Image) -> np.ndarray:
+    """
+    Returns depth map as numpy array (H, W) float32
+    Depth Anything v2 output (relative depth)
+    """
+    depth = model.infer_image(raw_img) # HxW raw depth map
+    return depth
+
+def preprocess_depth(depth: np.ndarray, target_size=256):
+    """
+    depth: (H, W) float32
+    returns: torch.Tensor (1, H, W) normalized to [-1, 1]
+    """
+
+    # normalize per-image
+    depth = (depth - depth.min()) / (depth.max() - depth.min() + 1e-6)
+
+    # map to JOINT-ID range
+    depth = depth * 288.0
+
+    # resize to match encoder input
+    depth = Image.fromarray(depth).resize(
+        (target_size, target_size), resample=Image.NEAREST
+    )
+    depth = np.array(depth, dtype=np.float32)
+
+    # normalize to [-1, 1] (same as RGB)
+    depth = depth / 144.0 - 1.0
+
+    depth = torch.from_numpy(depth).unsqueeze(0)  # (1, H, W)
+    return depth
+
 
 
 def check_is_image_file(f: Path):
@@ -43,18 +85,29 @@ def preprocess(img: Image.Image, target_image_size: int = 256):
 
 class DatasetFromFolder(Dataset):
     def __init__(self, image_dir, target_image_size: int = 256):
-        super(DatasetFromFolder, self).__init__()
+        super().__init__()
         self.target_image_size = target_image_size
         self.list_images = list(filter(check_is_image_file, Path(image_dir).glob('*.*')))
 
     def __getitem__(self, index):
         img_path = self.list_images[index]
-        img = open_image(img_path)
-        img = preprocess(img, self.target_image_size)
-        return img, str(img_path)
+
+        # RGB
+        img = open_image(img_path).convert("RGB")
+        img_rgb = preprocess(img, self.target_image_size)
+
+        # DEPTH
+        depth_np = get_depth_map(img)
+        depth = preprocess_depth(depth_np, self.target_image_size)
+
+        # CONCAT → (4, H, W)
+        img_4ch = torch.cat([img_rgb, depth], dim=0)
+
+        return img_4ch, str(img_path)
 
     def __len__(self):
         return len(self.list_images)
+
 
 
 def get_obj_from_str(string, reload=False):
@@ -133,7 +186,7 @@ def run(opt):
     print(colored(f'Input folder: {opt.data_path} has {len(test_dset)} image files to be processed', print_color))
 
     if opt.count_flops_params:
-        input = torch.randn(1, 3, 256, 256).to(device)
+        input = torch.randn(1, 4, 256, 256).to(device) # was 1,3 , to count flops s7
         macs, params = profile(model, inputs=(input,))
         macs, params = clever_format([macs, params], "%.3f")
         print(colored(f'Model MACS: {macs}', print_color))
