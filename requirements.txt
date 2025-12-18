@@ -15,5 +15,6 @@ torchmetrics==1.2.1
 tqdm==4.66.2
 wandb==0.16.3
 scikit-image
+jsonargparse[signatures]>=4.26.1
 
 
