@@ -19,5 +19,4 @@ jsonargparse[signatures]>=4.26.1
 gradio_imageslider
 gradio==4.29.0
 matplotlib
-torchvision
 
